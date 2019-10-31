@@ -20,7 +20,7 @@ RESOLUTION = 64 # 64x64, 128x128, 256x256
 assert (RESOLUTION % 64) == 0, "RESOLUTION should be 64, 128, or 256."
 
 # Batch size
-batchSize = 8
+batchSize = 4
 assert (batchSize != 1 and batchSize % 2 == 0) , "batchSize should be an even number."
 
 # Use motion blurs (data augmentation)
@@ -153,6 +153,7 @@ def reset_session(save_path):
     train_batchB = DataLoader(train_B, train_AnB, batchSize, img_dirB_bm_eyes,
                               RESOLUTION, num_cpus, K.get_session(), **da_config)
 
+t0 = time.time()
 gen_iterations = 0
 
 errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
@@ -172,154 +173,154 @@ train_batchA = DataLoader(train_A, train_AnB, batchSize, img_dirA_bm_eyes,
 train_batchB = DataLoader(train_B, train_AnB, batchSize, img_dirB_bm_eyes,
                           RESOLUTION, num_cpus, K.get_session(), **da_config)
 
-while gen_iterations <= TOTAL_ITERS:
-
-    # Loss function automation
-    if gen_iterations == (TOTAL_ITERS // 5 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = False
-        loss_config['m_mask'] = 0.0
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-    elif gen_iterations == (TOTAL_ITERS // 5 + TOTAL_ITERS // 10 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = True
-        loss_config['m_mask'] = 0.5
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Complete.")
-    elif gen_iterations == (2 * TOTAL_ITERS // 5 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = True
-        loss_config['m_mask'] = 0.2
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-    elif gen_iterations == (TOTAL_ITERS // 2 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = True
-        loss_config['m_mask'] = 0.4
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-    elif gen_iterations == (2 * TOTAL_ITERS // 3 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = False
-        loss_config['m_mask'] = 0.
-        loss_config['lr_factor'] = 0.3
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-    elif gen_iterations == (8 * TOTAL_ITERS // 10 - display_iters // 2):
-        clear_output()
-        model.decoder_A.load_weights("models/decoder_B.h5")  # swap decoders
-        model.decoder_B.load_weights("models/decoder_A.h5")  # swap decoders
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = True
-        loss_config['m_mask'] = 0.1
-        loss_config['lr_factor'] = 0.3
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-    elif gen_iterations == (9 * TOTAL_ITERS // 10 - display_iters // 2):
-        clear_output()
-        loss_config['use_PL'] = True
-        loss_config['use_mask_hinge_loss'] = False
-        loss_config['m_mask'] = 0.0
-        loss_config['lr_factor'] = 0.1
-        reset_session(models_dir)
-        print("Building new loss funcitons...")
-        show_loss_config(loss_config)
-        model.build_train_functions(loss_weights=loss_weights, **loss_config)
-        print("Done.")
-
-    if gen_iterations == 5:
-        print("working.")
-
-    # Train dicriminators for one batch
-    data_A = train_batchA.get_next_batch()
-    data_B = train_batchB.get_next_batch()
-    errDA, errDB = model.train_one_batch_D(data_A=data_A, data_B=data_B)
-    errDA_sum += errDA[0]
-    errDB_sum += errDB[0]
-
-    # Train generators for one batch
-    data_A = train_batchA.get_next_batch()
-    data_B = train_batchB.get_next_batch()
-    errGA, errGB = model.train_one_batch_G(data_A=data_A, data_B=data_B)
-    errGA_sum += errGA[0]
-    errGB_sum += errGB[0]
-    for i, k in enumerate(['ttl', 'adv', 'recon', 'edge', 'pl']):
-        errGAs[k] += errGA[i]
-        errGBs[k] += errGB[i]
-    gen_iterations += 1
-
-    # Visualization
-    if gen_iterations % display_iters == 0:
-        clear_output()
-
-        # Display loss information
-        show_loss_config(loss_config)
-        print("----------")
-        print('[iter %d] Loss_DA: %f Loss_DB: %f Loss_GA: %f Loss_GB: %f time: %f'
-              % (gen_iterations, errDA_sum / display_iters, errDB_sum / display_iters,
-                 errGA_sum / display_iters, errGB_sum / display_iters, time.time() - t0))
-        print("----------")
-        print("Generator loss details:")
-        print(f'[Adversarial loss]')
-        print(f'GA: {errGAs["adv"] / display_iters:.4f} GB: {errGBs["adv"] / display_iters:.4f}')
-        print(f'[Reconstruction loss]')
-        print(f'GA: {errGAs["recon"] / display_iters:.4f} GB: {errGBs["recon"] / display_iters:.4f}')
-        print(f'[Edge loss]')
-        print(f'GA: {errGAs["edge"] / display_iters:.4f} GB: {errGBs["edge"] / display_iters:.4f}')
-        if loss_config['use_PL'] == True:
-            print(f'[Perceptual loss]')
-            try:
-                print(f'GA: {errGAs["pl"][0] / display_iters:.4f} GB: {errGBs["pl"][0] / display_iters:.4f}')
-            except:
-                print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
-
-        # Display images
-        print("----------")
-        wA, tA, _ = train_batchA.get_next_batch()
-        wB, tB, _ = train_batchB.get_next_batch()
-        print("Transformed (masked) results:")
-        showG(tA, tB, model.path_A, model.path_B, batchSize)
-        print("Masks:")
-        showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
-        print("Reconstruction results:")
-        showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
-        errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
-        for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
-            errGAs[k] = 0
-            errGBs[k] = 0
-
-        # Save models
-        model.save_weights(path=models_dir)
-
-    # Backup models
-    if gen_iterations % backup_iters == 0:
-        bkup_dir = f"{models_dir}/backup_iter{gen_iterations}"
-        Path(bkup_dir).mkdir(parents=True, exist_ok=True)
-        model.save_weights(path=bkup_dir)
+# while gen_iterations <= TOTAL_ITERS:
+#
+#     # Loss function automation
+#     if gen_iterations == (TOTAL_ITERS // 5 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = False
+#         loss_config['m_mask'] = 0.0
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#     elif gen_iterations == (TOTAL_ITERS // 5 + TOTAL_ITERS // 10 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = True
+#         loss_config['m_mask'] = 0.5
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Complete.")
+#     elif gen_iterations == (2 * TOTAL_ITERS // 5 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = True
+#         loss_config['m_mask'] = 0.2
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#     elif gen_iterations == (TOTAL_ITERS // 2 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = True
+#         loss_config['m_mask'] = 0.4
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#     elif gen_iterations == (2 * TOTAL_ITERS // 3 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = False
+#         loss_config['m_mask'] = 0.
+#         loss_config['lr_factor'] = 0.3
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#     elif gen_iterations == (8 * TOTAL_ITERS // 10 - display_iters // 2):
+#         clear_output()
+#         model.decoder_A.load_weights("models/decoder_B.h5")  # swap decoders
+#         model.decoder_B.load_weights("models/decoder_A.h5")  # swap decoders
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = True
+#         loss_config['m_mask'] = 0.1
+#         loss_config['lr_factor'] = 0.3
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#     elif gen_iterations == (9 * TOTAL_ITERS // 10 - display_iters // 2):
+#         clear_output()
+#         loss_config['use_PL'] = True
+#         loss_config['use_mask_hinge_loss'] = False
+#         loss_config['m_mask'] = 0.0
+#         loss_config['lr_factor'] = 0.1
+#         reset_session(models_dir)
+#         print("Building new loss funcitons...")
+#         show_loss_config(loss_config)
+#         model.build_train_functions(loss_weights=loss_weights, **loss_config)
+#         print("Done.")
+#
+#     if gen_iterations == 5:
+#         print("working.")
+#
+#     # Train dicriminators for one batch
+#     data_A = train_batchA.get_next_batch()
+#     data_B = train_batchB.get_next_batch()
+#     errDA, errDB = model.train_one_batch_D(data_A=data_A, data_B=data_B)
+#     errDA_sum += errDA[0]
+#     errDB_sum += errDB[0]
+#
+#     # Train generators for one batch
+#     data_A = train_batchA.get_next_batch()
+#     data_B = train_batchB.get_next_batch()
+#     errGA, errGB = model.train_one_batch_G(data_A=data_A, data_B=data_B)
+#     errGA_sum += errGA[0]
+#     errGB_sum += errGB[0]
+#     for i, k in enumerate(['ttl', 'adv', 'recon', 'edge', 'pl']):
+#         errGAs[k] += errGA[i]
+#         errGBs[k] += errGB[i]
+#     gen_iterations += 1
+#
+#     # Visualization
+#     if gen_iterations % display_iters == 0:
+#         clear_output()
+#
+#         # Display loss information
+#         show_loss_config(loss_config)
+#         print("----------")
+#         print('[iter %d] Loss_DA: %f Loss_DB: %f Loss_GA: %f Loss_GB: %f time: %f'
+#               % (gen_iterations, errDA_sum / display_iters, errDB_sum / display_iters,
+#                  errGA_sum / display_iters, errGB_sum / display_iters, time.time() - t0))
+#         print("----------")
+#         print("Generator loss details:")
+#         print(f'[Adversarial loss]')
+#         print(f'GA: {errGAs["adv"] / display_iters:.4f} GB: {errGBs["adv"] / display_iters:.4f}')
+#         print(f'[Reconstruction loss]')
+#         print(f'GA: {errGAs["recon"] / display_iters:.4f} GB: {errGBs["recon"] / display_iters:.4f}')
+#         print(f'[Edge loss]')
+#         print(f'GA: {errGAs["edge"] / display_iters:.4f} GB: {errGBs["edge"] / display_iters:.4f}')
+#         if loss_config['use_PL'] == True:
+#             print(f'[Perceptual loss]')
+#             try:
+#                 print(f'GA: {errGAs["pl"][0] / display_iters:.4f} GB: {errGBs["pl"][0] / display_iters:.4f}')
+#             except:
+#                 print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
+#
+#         # Display images
+#         print("----------")
+#         wA, tA, _ = train_batchA.get_next_batch()
+#         wB, tB, _ = train_batchB.get_next_batch()
+#         print("Transformed (masked) results:")
+#         showG(tA, tB, model.path_A, model.path_B, batchSize)
+#         print("Masks:")
+#         showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
+#         print("Reconstruction results:")
+#         showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
+#         errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
+#         for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
+#             errGAs[k] = 0
+#             errGBs[k] = 0
+#
+#         # Save models
+#         model.save_weights(path=models_dir)
+#
+#     # Backup models
+#     if gen_iterations % backup_iters == 0:
+#         bkup_dir = f"{models_dir}/backup_iter{gen_iterations}"
+#         Path(bkup_dir).mkdir(parents=True, exist_ok=True)
+#         model.save_weights(path=bkup_dir)
 
 # Display random results
 wA, tA, _ = train_batchA.get_next_batch()
@@ -404,3 +405,8 @@ def interpolate_imgs(im1, im2):
 plt.figure(figsize=(15,8))
 plt.imshow(np.hstack(interpolate_imgs(input_img, result_input_img)))
 
+
+cv2.imwrite('input.jpg', cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
+cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
+
+plt.show()

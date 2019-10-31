@@ -93,8 +93,8 @@ def process_mtcnn_bbox(bboxes, im_shape):
 def process_video(input_img):
     global frames, save_interval
     global pnet, rnet, onet
-    minsize = 30  # minimum size of face
-    detec_threshold = 0.7
+    minsize = 50  # minimum size of face
+    detec_threshold = 0.9
     threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
     factor = 0.709  # scale factor
 
