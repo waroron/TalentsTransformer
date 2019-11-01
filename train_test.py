@@ -134,7 +134,7 @@ if __name__ == '__main__':
     Path(f"models").mkdir(parents=True, exist_ok=True)
 
     # Get filenames
-    train_img = glob.glob(img_dir + "/*.*")
+    train_img = glob.glob(img_dir + f"/raw_faces/*.*")
 
     assert len(train_img), "No image found in " + str(img_dir)
     print("Number of images in folder: " + str(len(train_img)))
@@ -162,10 +162,26 @@ if __name__ == '__main__':
 
     display_iters = 300
     backup_iters = 5000
-    TOTAL_ITERS = 40000
+    TOTAL_ITERS = 10000
+
+
+    def reset_session(save_path):
+        global model, vggface
+        global train_batchA, train_batchB
+        model.save_weights(path=save_path)
+        del model
+        del vggface
+        del train_batchA
+        del train_batchB
+        K.clear_session()
+        model = FaceswapGANModel(**arch_config)
+        model.load_weights(path=save_path)
+        vggface = VGGFace(include_top=False, model='resnet50', input_shape=(224, 224, 3))
+        model.build_pl_model(vggface_model=vggface, before_activ=loss_config["PL_before_activ"])
+        train_batchA = DataLoader(train_img, train_img, batchSize, img_dir_bm_eyes,
+                                  RESOLUTION, num_cpus, K.get_session(), **da_config)
 
     while gen_iterations <= TOTAL_ITERS:
-
         # Loss function automation
         if gen_iterations == (TOTAL_ITERS // 5 - display_iters // 2):
             clear_output()
@@ -285,19 +301,18 @@ if __name__ == '__main__':
                     print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
 
             # Display images
-            print("----------")
-            wA, tA, _ = train_batchA.get_next_batch()
-            wB, tB, _ = train_batchB.get_next_batch()
-            print("Transformed (masked) results:")
-            showG(tA, tB, model.path_A, model.path_B, batchSize)
-            print("Masks:")
-            showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
-            print("Reconstruction results:")
-            showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
-            errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
-            for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
-                errGAs[k] = 0
-                errGBs[k] = 0
+            # print("----------")
+            # wA, tA, _ = train_batchA.get_next_batch()
+            # print("Transformed (masked) results:")
+            # showG(tA, tB, model.path_A, model.path_B, batchSize)
+            # print("Masks:")
+            # showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
+            # print("Reconstruction results:")
+            # showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
+            # errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
+            # for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
+            #     errGAs[k] = 0
+            #     errGBs[k] = 0
 
             # Save models
             model.save_weights(path=models_dir)
@@ -307,16 +322,6 @@ if __name__ == '__main__':
             bkup_dir = f"{models_dir}/backup_iter{gen_iterations}"
             Path(bkup_dir).mkdir(parents=True, exist_ok=True)
             model.save_weights(path=bkup_dir)
-
-    # Display random results
-    wA, tA, _ = train_batchA.get_next_batch()
-    wB, tB, _ = train_batchB.get_next_batch()
-    print("Transformed (masked) results:")
-    showG(tA, tB, model.path_A, model.path_B, batchSize)
-    print("Masks:")
-    showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
-    print("Reconstruction results:")
-    showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
 
     mtcnn_weights_dir = "./mtcnn_weights/"
     fd = MTCNNFaceDetector(sess=K.get_session(), model_path=mtcnn_weights_dir)
@@ -356,7 +361,7 @@ if __name__ == '__main__':
     # Transform detected face
     result_img, result_rgb, result_mask = ftrans.transform(
         aligned_det_face_im,
-        direction="AtoB",
+        direction="BtoA",
         roi_coverage=0.93,
         color_correction="adain_xyz",
         IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)

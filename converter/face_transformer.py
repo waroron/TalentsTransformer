@@ -90,7 +90,7 @@ class FaceTransformer(object):
         roi_x, roi_y = int(img_size[0]*(1-roi_coverage)), int(img_size[1]*(1-roi_coverage))
         mask[roi_x:-roi_x, roi_y:-roi_y,:]  = 255
         mask = cv2.GaussianBlur(mask,(15,15),10)
-        return mask  
+        return mask
 
     def transform(self, inp_img, direction, roi_coverage, color_correction, IMAGE_SHAPE):
         self.check_generator_model(self.model)
