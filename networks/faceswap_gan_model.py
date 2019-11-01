@@ -303,31 +303,31 @@ class FaceswapGANModel():
             print ("Error occurs during saving weights.")
             pass
         
-    def train_one_batch_G(self, data_A, data_B):
-        if len(data_A) == 4 and len(data_B) == 4:
+    def train_one_batch_G(self, data_A):
+        if len(data_A) == 4:
             _, warped_A, target_A, bm_eyes_A = data_A
-            _, warped_B, target_B, bm_eyes_B = data_B
-        elif len(data_A) == 3 and len(data_B) == 3:
+            # _, warped_B, target_B, bm_eyes_B = data_B
+        elif len(data_A) == 3:
             warped_A, target_A, bm_eyes_A = data_A
-            warped_B, target_B, bm_eyes_B = data_B
+            # warped_B, target_B, bm_eyes_B = data_B
         else:
             raise ValueError("Something's wrong with the input data generator.")
         errGA = self.netGA_train([warped_A, target_A, bm_eyes_A])
-        errGB = self.netGB_train([warped_B, target_B, bm_eyes_B])        
-        return errGA, errGB
+        # errGB = self.netGB_train([warped_B, target_B, bm_eyes_B])
+        return errGA
     
-    def train_one_batch_D(self, data_A, data_B):
-        if len(data_A) == 4 and len(data_B) == 4:
+    def train_one_batch_D(self, data_A):
+        if len(data_A) == 4:
             _, warped_A, target_A, _ = data_A
-            _, warped_B, target_B, _ = data_B
-        elif len(data_A) == 3 and len(data_B) == 3:
+            # _, warped_B, target_B, _ = data_B
+        elif len(data_A) == 3:
             warped_A, target_A, _ = data_A
-            warped_B, target_B, _ = data_B
+            # warped_B, target_B, _ = data_B
         else:
             raise ValueError("Something's wrong with the input data generator.")
         errDA = self.netDA_train([warped_A, target_A])
-        errDB = self.netDB_train([warped_B, target_B])
-        return errDA, errDB
+        # errDB = self.netDB_train([warped_B, target_B])
+        return errDA
     
     def transform_A2B(self, img):
         return self.path_abgr_B([[img]])

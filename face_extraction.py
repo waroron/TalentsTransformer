@@ -93,6 +93,7 @@ def process_mtcnn_bbox(bboxes, im_shape):
 def process_video(input_img):
     global frames, save_interval
     global pnet, rnet, onet
+    global person
     minsize = 50  # minimum size of face
     detec_threshold = 0.9
     threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
@@ -115,9 +116,9 @@ def process_video(input_img):
             aligned_det_face_im = landmarks_match_mtcnn(
                 det_face_im, src_landmarks, tar_landmarks)
 
-            fname = f"./faces/aligned_faces/frame{frames}face{str(idx)}.jpg"
+            fname = f"./faces/{person}/aligned_faces/frame{frames}face{str(idx)}.jpg"
             plt.imsave(fname, aligned_det_face_im, format="jpg")
-            fname = f"./faces/raw_faces/frame{frames}face{str(idx)}.jpg"
+            fname = f"./faces/{person}/raw_faces/frame{frames}face{str(idx)}.jpg"
             plt.imsave(fname, det_face_im, format="jpg")
 
             bm = np.zeros_like(aligned_det_face_im)
@@ -127,7 +128,7 @@ def process_video(input_img):
             bm[int(src_landmarks[1][0] - h / 15):int(src_landmarks[1][0] + h / 15),
             int(src_landmarks[1][1] - w / 8):int(src_landmarks[1][1] + w / 8), :] = 255
             bm = landmarks_match_mtcnn(bm, src_landmarks, tar_landmarks)
-            fname = f"./faces/binary_masks_eyes/frame{frames}face{str(idx)}.jpg"
+            fname = f"./faces/{person}/binary_masks_eyes/frame{frames}face{str(idx)}.jpg"
             plt.imsave(fname, bm, format="jpg")
 
     return np.zeros((3, 3, 3))
@@ -136,6 +137,7 @@ def process_video(input_img):
 if __name__ == '__main__':
     WEIGHTS_PATH = "./mtcnn_weights/"
     MOVIE_FOLDER = "./movie/"
+    persons = os.listdir(MOVIE_FOLDER)
 
     sess = K.get_session()
     with sess.as_default():
@@ -145,18 +147,23 @@ if __name__ == '__main__':
     rnet = K.function([rnet.layers['data']], [rnet.layers['conv5-2'], rnet.layers['prob1']])
     onet = K.function([onet.layers['data']], [onet.layers['conv6-2'], onet.layers['conv6-3'], onet.layers['prob1']])
 
-    Path(f"faces/aligned_faces").mkdir(parents=True, exist_ok=True)
-    Path(f"faces/raw_faces").mkdir(parents=True, exist_ok=True)
-    Path(f"faces/binary_masks_eyes").mkdir(parents=True, exist_ok=True)
+    for person in persons:
+        print(f'persons: {person}')
 
-    frames = 0
+        Path(f"faces/{person}/aligned_faces").mkdir(parents=True, exist_ok=True)
+        Path(f"faces/{person}/raw_faces").mkdir(parents=True, exist_ok=True)
+        Path(f"faces/{person}/binary_masks_eyes").mkdir(parents=True, exist_ok=True)
+        frames = 0
 
-    # configuration
-    save_interval = 6  # perform face detection every {save_interval} frames
-    fn_input_video = os.path.join(MOVIE_FOLDER, "tulip.mp4")
+        # configuration
+        save_interval = 6  # perform face detection every {save_interval} frames
+        movies = os.listdir(MOVIE_FOLDER + person)
+        for movie in movies:
+            fn_input_video = os.path.join(MOVIE_FOLDER + person, movie)
+            print(f"load {movie}")
 
-    output = 'dummy.mp4'
-    clip1 = VideoFileClip(fn_input_video)
-    clip = clip1.fl_image(process_video)  # .subclip(0,3) #NOTE: this function expects color images!!
-    clip.write_videofile(output, audio=False)
-    clip1.reader.close()
+            output = 'dummy.mp4'
+            clip1 = VideoFileClip(fn_input_video)
+            clip = clip1.fl_image(process_video)  # .subclip(0,3) #NOTE: this function expects color images!!
+            clip.write_videofile(output, audio=False)
+            clip1.reader.close()
