@@ -314,60 +314,57 @@ def test_faceswap(person, model_path, test_path):
     ftrans.set_model(model)
 
     # Read input image
-    input_img = plt.imread("./TEST_IMAGE.jpg")[..., :3]
+    test_imgs = glob.glob(test_path + '*.jpg')
+    Path(test_path + person).mkdir(parents=True, exist_ok=True)
 
-    if input_img.dtype == np.float32:
-        print("input_img has dtype np.float32 (perhaps the image format is PNG). Scale it to uint8.")
-        input_img = (input_img * 255).astype(np.uint8)
+    for test_img in test_imgs:
+        input_img = plt.imread(test_img)[..., :3]
 
-    plt.imshow(input_img)
+        if input_img.dtype == np.float32:
+            print("input_img has dtype np.float32 (perhaps the image format is PNG). Scale it to uint8.")
+            input_img = (input_img * 255).astype(np.uint8)
 
-    # Display detected face
-    faces, lms = fd.detect_face(input_img)
-    x0, y1, x1, y0, _ = faces[0]
-    det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
-    try:
-        src_landmarks = get_src_landmarks(x0, x1, y0, y1, lms)
-        tar_landmarks = get_tar_landmarks(det_face_im)
-        aligned_det_face_im = landmarks_match_mtcnn(det_face_im, src_landmarks, tar_landmarks)
-    except:
-        print("An error occured during face alignment.")
-        aligned_det_face_im = det_face_im
-    plt.imshow(aligned_det_face_im)
-    # Transform detected face
-    result_img, result_rgb, result_mask = ftrans.transform(
-        aligned_det_face_im,
-        direction="BtoA",
-        roi_coverage=0.93,
-        color_correction="adain_xyz",
-        IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
-    )
-    try:
-        result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
-        result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
-        result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
-    except:
-        print("An error occured during face alignment.")
-        pass
+        # Display detected face
+        faces, lms = fd.detect_face(input_img)
+        x0, y1, x1, y0, _ = faces[0]
+        det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
+        try:
+            src_landmarks = get_src_landmarks(x0, x1, y0, y1, lms)
+            tar_landmarks = get_tar_landmarks(det_face_im)
+            aligned_det_face_im = landmarks_match_mtcnn(det_face_im, src_landmarks, tar_landmarks)
+        except:
+            print("An error occured during face alignment.")
+            aligned_det_face_im = det_face_im
+        # plt.imshow(aligned_det_face_im)
+        # Transform detected face
+        result_img, result_rgb, result_mask = ftrans.transform(
+            aligned_det_face_im,
+            direction="BtoA",
+            roi_coverage=0.93,
+            color_correction="adain_xyz",
+            IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
+        )
+        try:
+            result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
+            result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
+            result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
+        except:
+            print("An error occured during face alignment.")
+            pass
 
-    result_input_img = input_img.copy()
-    result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
-                                                            (1 - result_mask.astype(
-                                                                np.float32) / 255) * result_input_img[int(x0):int(x1),
-                                                                                     int(y0):int(y1), :]
+        result_input_img = input_img.copy()
+        result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
+                                                                (1 - result_mask.astype(
+                                                                    np.float32) / 255) * result_input_img[int(x0):int(x1),
+                                                                                         int(y0):int(y1), :]
 
-    plt.imshow(result_input_img[int(x0):int(x1), int(y0):int(y1), :])
-    plt.imshow(result_rgb)
-    plt.imshow(result_mask[..., 0])
 
-    plt.figure(figsize=(15, 8))
-    plt.imshow(np.hstack(interpolate_imgs(input_img, result_input_img)))
+        plt.imshow(result_input_img)
+        plt.imsave(test_path + person + f'/{test_img}')
+        # cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
-    cv2.imwrite('input.jpg', cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
-    cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
-
-    plt.show()
-
+        # plt.show()
+    
 
 if __name__ == '__main__':
     person = 'senga'
