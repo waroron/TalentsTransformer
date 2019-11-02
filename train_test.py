@@ -301,8 +301,8 @@ def train_person(person):
             model.save_weights(path=bkup_dir)
 
 
-def test_faceswap(model_path, test_path):
-    mtcnn_weights_dir = "./mtcnn_weights/"
+def test_faceswap(person, model_path, test_path):
+    mtcnn_weights_dir = f"./mtcnn_weights/{person}"
     fd = MTCNNFaceDetector(sess=K.get_session(), model_path=mtcnn_weights_dir)
 
     da_config, arch_config, loss_weights, loss_config = get_model_params()
@@ -324,40 +324,37 @@ def test_faceswap(model_path, test_path):
 
     # Display detected face
     faces, lms = fd.detect_face(input_img)
-    for face in faces:
-        x0, y1, x1, y0, _ = face
-        det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
-        try:
-            src_landmarks = get_src_landmarks(x0, x1, y0, y1, lms)
-            tar_landmarks = get_tar_landmarks(det_face_im)
-            aligned_det_face_im = landmarks_match_mtcnn(det_face_im, src_landmarks, tar_landmarks)
-        except:
-            print("An error occured during face alignment.")
-            aligned_det_face_im = det_face_im
+    x0, y1, x1, y0, _ = faces[0]
+    det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
+    try:
+        src_landmarks = get_src_landmarks(x0, x1, y0, y1, lms)
+        tar_landmarks = get_tar_landmarks(det_face_im)
+        aligned_det_face_im = landmarks_match_mtcnn(det_face_im, src_landmarks, tar_landmarks)
+    except:
+        print("An error occured during face alignment.")
+        aligned_det_face_im = det_face_im
+    plt.imshow(aligned_det_face_im)
+    # Transform detected face
+    result_img, result_rgb, result_mask = ftrans.transform(
+        aligned_det_face_im,
+        direction="BtoA",
+        roi_coverage=0.93,
+        color_correction="adain_xyz",
+        IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
+    )
+    try:
+        result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
+        result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
+        result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
+    except:
+        print("An error occured during face alignment.")
+        pass
 
-        plt.imshow(aligned_det_face_im)
-
-        # Transform detected face
-        result_img, result_rgb, result_mask = ftrans.transform(
-            aligned_det_face_im,
-            direction="BtoA",
-            roi_coverage=0.93,
-            color_correction="adain_xyz",
-            IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
-        )
-        try:
-            result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
-            result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
-            result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
-        except:
-            print("An error occured during face alignment.")
-            pass
-
-        result_input_img = input_img.copy()
-        result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
-                                                                (1 - result_mask.astype(
-                                                                    np.float32) / 255) * result_input_img[int(x0):int(x1),
-                                                                                         int(y0):int(y1), :]
+    result_input_img = input_img.copy()
+    result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
+                                                            (1 - result_mask.astype(
+                                                                np.float32) / 255) * result_input_img[int(x0):int(x1),
+                                                                                     int(y0):int(y1), :]
 
     plt.imshow(result_input_img[int(x0):int(x1), int(y0):int(y1), :])
     plt.imshow(result_rgb)

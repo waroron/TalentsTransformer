@@ -40,32 +40,17 @@ class FaceswapGANModel():
                                             norm=self.norm,
                                             model_capacity=self.model_capacity
                                            )
-        self.decoder_B = self.build_decoder(nc_in=self.enc_nc_out, 
-                                            input_size=8, 
-                                            output_size=self.IMAGE_SHAPE[0],
-                                            use_self_attn=self.use_self_attn,
-                                            norm=self.norm,
-                                            model_capacity=self.model_capacity
-                                           )
         self.netDA = self.build_discriminator(nc_in=self.nc_D_inp, 
-                                              input_size=self.IMAGE_SHAPE[0],
-                                              use_self_attn=self.use_self_attn,
-                                              norm=self.norm                                         
-                                             )
-        self.netDB = self.build_discriminator(nc_in=self.nc_D_inp, 
                                               input_size=self.IMAGE_SHAPE[0],
                                               use_self_attn=self.use_self_attn,
                                               norm=self.norm                                         
                                              )
         x = Input(shape=self.IMAGE_SHAPE) # dummy input tensor
         self.netGA = Model(x, self.decoder_A(self.encoder(x)))
-        self.netGB = Model(x, self.decoder_B(self.encoder(x)))
         
         # define variables
         self.distorted_A, self.fake_A, self.mask_A, \
         self.path_A, self.path_mask_A, self.path_abgr_A, self.path_bgr_A = self.define_variables(netG=self.netGA)
-        self.distorted_B, self.fake_B, self.mask_B, \
-        self.path_B, self.path_mask_B, self.path_abgr_B, self.path_bgr_B = self.define_variables(netG=self.netGB)
         self.real_A = Input(shape=self.IMAGE_SHAPE)
         self.real_B = Input(shape=self.IMAGE_SHAPE)
         self.mask_eyes_A = Input(shape=self.IMAGE_SHAPE)
@@ -283,9 +268,7 @@ class FaceswapGANModel():
         try:
             self.encoder.load_weights(f"{path}/encoder.h5")
             self.decoder_A.load_weights(f"{path}/decoder_A.h5")
-            self.decoder_B.load_weights(f"{path}/decoder_B.h5")
-            self.netDA.load_weights(f"{path}/netDA.h5") 
-            self.netDB.load_weights(f"{path}/netDB.h5") 
+            self.netDA.load_weights(f"{path}/netDA.h5")
             print ("Model weights files are successfully loaded.")
         except:
             print ("Error occurs during loading weights files.")
@@ -295,9 +278,7 @@ class FaceswapGANModel():
         try:
             self.encoder.save_weights(f"{path}/encoder.h5")
             self.decoder_A.save_weights(f"{path}/decoder_A.h5")
-            self.decoder_B.save_weights(f"{path}/decoder_B.h5")
-            self.netDA.save_weights(f"{path}/netDA.h5") 
-            self.netDB.save_weights(f"{path}/netDB.h5") 
+            self.netDA.save_weights(f"{path}/netDA.h5")
             print (f"Model weights files have been saved to {path}.")
         except:
             print ("Error occurs during saving weights.")
@@ -306,10 +287,8 @@ class FaceswapGANModel():
     def train_one_batch_G(self, data_A):
         if len(data_A) == 4:
             _, warped_A, target_A, bm_eyes_A = data_A
-            # _, warped_B, target_B, bm_eyes_B = data_B
         elif len(data_A) == 3:
             warped_A, target_A, bm_eyes_A = data_A
-            # warped_B, target_B, bm_eyes_B = data_B
         else:
             raise ValueError("Something's wrong with the input data generator.")
         errGA = self.netGA_train([warped_A, target_A, bm_eyes_A])
@@ -319,10 +298,8 @@ class FaceswapGANModel():
     def train_one_batch_D(self, data_A):
         if len(data_A) == 4:
             _, warped_A, target_A, _ = data_A
-            # _, warped_B, target_B, _ = data_B
         elif len(data_A) == 3:
             warped_A, target_A, _ = data_A
-            # warped_B, target_B, _ = data_B
         else:
             raise ValueError("Something's wrong with the input data generator.")
         errDA = self.netDA_train([warped_A, target_A])
