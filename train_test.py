@@ -20,27 +20,14 @@ from detector.face_detector import MTCNNFaceDetector
 from converter.landmarks_alignment import *
 from converter.face_transformer import FaceTransformer
 
+# Input/Output resolution
+RESOLUTION = 64  # 64x64, 128x128, 256x256
+assert (RESOLUTION % 64) == 0, "RESOLUTION should be 64, 128, or 256."
+
 
 def show_loss_config(loss_config):
     for config, value in loss_config.items():
         print(f"{config} = {value}")
-
-
-def reset_session(save_path):
-    global model, vggface
-    global train_batchA, train_batchB
-    model.save_weights(path=save_path)
-    del model
-    del vggface
-    del train_batchA
-    del train_batchB
-    K.clear_session()
-    model = FaceswapGANModel(**arch_config)
-    model.load_weights(path=save_path)
-    vggface = VGGFace(include_top=False, model='resnet50', input_shape=(224, 224, 3))
-    model.build_pl_model(vggface_model=vggface, before_activ=loss_config["PL_before_activ"])
-    train_batchA = DataLoader(train_A, train_AnB, batchSize, img_dirA_bm_eyes,
-                              RESOLUTION, num_cpus, K.get_session(), **da_config)
 
 
 # Display interpolations before/after transformation
@@ -51,27 +38,10 @@ def interpolate_imgs(im1, im2):
     return out
 
 
-def train_person(person):
-    pass
-
-
-if __name__ == '__main__':
-    person = 'senga'
-
-    # Number of CPU cores
-    num_cpus = os.cpu_count()
-
-    # Input/Output resolution
-    RESOLUTION = 64  # 64x64, 128x128, 256x256
-    assert (RESOLUTION % 64) == 0, "RESOLUTION should be 64, 128, or 256."
-
-    # Batch size
-    batchSize = 4
-    assert (batchSize != 1 and batchSize % 2 == 0), "batchSize should be an even number."
-
+def get_model_params():
     # Use motion blurs (data augmentation)
     # set True if training data contains images extracted from videos
-    use_da_motion_blur = False
+    use_da_motion_blur = True
 
     # Use eye-aware training
     # require images generated from prep_binary_masks.ipynb
@@ -85,13 +55,6 @@ if __name__ == '__main__':
         "use_da_motion_blur": use_da_motion_blur,
         "use_bm_eyes": use_bm_eyes
     }
-
-    # Path to training images
-    img_dir = f'./faces/{person}'
-    img_dir_bm_eyes = f"./binary_masks/{person}"
-
-    # Path to saved model weights
-    models_dir = "./models"
 
     # Architecture configuration
     arch_config = {}
@@ -118,6 +81,26 @@ if __name__ == '__main__':
     loss_config['lr_factor'] = 1.
     loss_config['use_cyclic_loss'] = False
 
+    return da_config, arch_config, loss_weights, loss_config
+
+
+def train_person(person):
+    # Number of CPU cores
+    num_cpus = os.cpu_count()
+
+    # Batch size
+    batchSize = 4
+    assert (batchSize != 1 and batchSize % 2 == 0), "batchSize should be an even number."
+
+    # Path to training images
+    img_dir = f'./faces/{person}'
+    img_dir_bm_eyes = f"./binary_masks/{person}"
+
+    # Path to saved model weights
+    models_dir = f"./models/{person}"
+
+    da_config, arch_config, loss_weights, loss_config = get_model_params()
+
     model = FaceswapGANModel(**arch_config)
     model.load_weights(path=models_dir)
 
@@ -131,7 +114,7 @@ if __name__ == '__main__':
     model.build_train_functions(loss_weights=loss_weights, **loss_config)
 
     # Create ./models directory
-    Path(f"models").mkdir(parents=True, exist_ok=True)
+    Path(models_dir).mkdir(parents=True, exist_ok=True)
 
     # Get filenames
     train_img = glob.glob(img_dir + f"/raw_faces/*.*")
@@ -139,7 +122,7 @@ if __name__ == '__main__':
     assert len(train_img), "No image found in " + str(img_dir)
     print("Number of images in folder: " + str(len(train_img)))
 
-    if use_bm_eyes:
+    if da_config["use_bm_eyes"]:
         assert len(glob.glob(img_dir_bm_eyes + "/*.*")), "No binary mask found in " + str(img_dir_bm_eyes)
         assert len(glob.glob(img_dir_bm_eyes + "/*.*")) == len(train_img), \
             "Number of faceA images does not match number of their binary masks. Can be caused by any none image file in the folder."
@@ -164,15 +147,8 @@ if __name__ == '__main__':
     backup_iters = 5000
     TOTAL_ITERS = 10000
 
-
-    def reset_session(save_path):
-        global model, vggface
-        global train_batchA, train_batchB
+    def reset_session(save_path, model):
         model.save_weights(path=save_path)
-        del model
-        del vggface
-        del train_batchA
-        del train_batchB
         K.clear_session()
         model = FaceswapGANModel(**arch_config)
         model.load_weights(path=save_path)
@@ -180,6 +156,7 @@ if __name__ == '__main__':
         model.build_pl_model(vggface_model=vggface, before_activ=loss_config["PL_before_activ"])
         train_batchA = DataLoader(train_img, train_img, batchSize, img_dir_bm_eyes,
                                   RESOLUTION, num_cpus, K.get_session(), **da_config)
+        return model, vggface, train_batchA
 
     while gen_iterations <= TOTAL_ITERS:
         # Loss function automation
@@ -188,7 +165,7 @@ if __name__ == '__main__':
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = False
             loss_config['m_mask'] = 0.0
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -198,7 +175,7 @@ if __name__ == '__main__':
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.5
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -208,7 +185,7 @@ if __name__ == '__main__':
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.2
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -218,7 +195,7 @@ if __name__ == '__main__':
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.4
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -229,7 +206,7 @@ if __name__ == '__main__':
             loss_config['use_mask_hinge_loss'] = False
             loss_config['m_mask'] = 0.
             loss_config['lr_factor'] = 0.3
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -242,7 +219,7 @@ if __name__ == '__main__':
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.1
             loss_config['lr_factor'] = 0.3
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -253,7 +230,7 @@ if __name__ == '__main__':
             loss_config['use_mask_hinge_loss'] = False
             loss_config['m_mask'] = 0.0
             loss_config['lr_factor'] = 0.1
-            reset_session(models_dir)
+            model, vggface, train_batchA = reset_session(models_dir, model)
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -323,8 +300,15 @@ if __name__ == '__main__':
             Path(bkup_dir).mkdir(parents=True, exist_ok=True)
             model.save_weights(path=bkup_dir)
 
+
+def test_faceswap(model_path, test_path):
     mtcnn_weights_dir = "./mtcnn_weights/"
     fd = MTCNNFaceDetector(sess=K.get_session(), model_path=mtcnn_weights_dir)
+
+    da_config, arch_config, loss_weights, loss_config = get_model_params()
+
+    model = FaceswapGANModel(**arch_config)
+    model.load_weights(path=model_path)
 
     ftrans = FaceTransformer()
     ftrans.set_model(model)
@@ -339,9 +323,9 @@ if __name__ == '__main__':
     plt.imshow(input_img)
 
     # Display detected face
-    face, lms = fd.detect_face(input_img)
-    if len(face) == 1:
-        x0, y1, x1, y0, _ = face[0]
+    faces, lms = fd.detect_face(input_img)
+    for face in faces:
+        x0, y1, x1, y0, _ = face
         det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
         try:
             src_landmarks = get_src_landmarks(x0, x1, y0, y1, lms)
@@ -350,35 +334,30 @@ if __name__ == '__main__':
         except:
             print("An error occured during face alignment.")
             aligned_det_face_im = det_face_im
-    elif len(face) == 0:
-        raise ValueError("Error: no face detected.")
-    elif len(face) > 1:
-        print(face)
-        raise ValueError("Error: multiple faces detected")
 
-    plt.imshow(aligned_det_face_im)
+        plt.imshow(aligned_det_face_im)
 
-    # Transform detected face
-    result_img, result_rgb, result_mask = ftrans.transform(
-        aligned_det_face_im,
-        direction="BtoA",
-        roi_coverage=0.93,
-        color_correction="adain_xyz",
-        IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
-    )
-    try:
-        result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
-        result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
-        result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
-    except:
-        print("An error occured during face alignment.")
-        pass
+        # Transform detected face
+        result_img, result_rgb, result_mask = ftrans.transform(
+            aligned_det_face_im,
+            direction="BtoA",
+            roi_coverage=0.93,
+            color_correction="adain_xyz",
+            IMAGE_SHAPE=(RESOLUTION, RESOLUTION, 3)
+        )
+        try:
+            result_img = landmarks_match_mtcnn(result_img, tar_landmarks, src_landmarks)
+            result_rgb = landmarks_match_mtcnn(result_rgb, tar_landmarks, src_landmarks)
+            result_mask = landmarks_match_mtcnn(result_mask, tar_landmarks, src_landmarks)
+        except:
+            print("An error occured during face alignment.")
+            pass
 
-    result_input_img = input_img.copy()
-    result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
-                                                            (1 - result_mask.astype(
-                                                                np.float32) / 255) * result_input_img[int(x0):int(x1),
-                                                                                     int(y0):int(y1), :]
+        result_input_img = input_img.copy()
+        result_input_img[int(x0):int(x1), int(y0):int(y1), :] = result_mask.astype(np.float32) / 255 * result_rgb + \
+                                                                (1 - result_mask.astype(
+                                                                    np.float32) / 255) * result_input_img[int(x0):int(x1),
+                                                                                         int(y0):int(y1), :]
 
     plt.imshow(result_input_img[int(x0):int(x1), int(y0):int(y1), :])
     plt.imshow(result_rgb)
@@ -391,3 +370,9 @@ if __name__ == '__main__':
     cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
     plt.show()
+
+
+if __name__ == '__main__':
+    person = 'senga'
+    train_person('senga')
+
