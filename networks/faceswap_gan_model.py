@@ -168,69 +168,47 @@ class FaceswapGANModel():
                                                 self.distorted_A, 
                                                 loss_config["gan_training"], 
                                                 **loss_weights)
-        loss_DB, loss_adv_GB = adversarial_loss(self.netDB, self.real_B, self.fake_B, 
-                                                self.distorted_B, 
-                                                loss_config["gan_training"], 
-                                                **loss_weights)
 
         # Reconstruction loss
         loss_recon_GA = reconstruction_loss(self.real_A, self.fake_A, 
                                             self.mask_eyes_A, self.netGA.outputs,
                                             **loss_weights)
-        loss_recon_GB = reconstruction_loss(self.real_B, self.fake_B, 
-                                            self.mask_eyes_B, self.netGB.outputs,
-                                            **loss_weights)
 
         # Edge loss
         loss_edge_GA = edge_loss(self.real_A, self.fake_A, self.mask_eyes_A, **loss_weights)
-        loss_edge_GB = edge_loss(self.real_B, self.fake_B, self.mask_eyes_B, **loss_weights)
 
         if loss_config['use_PL']:
             loss_pl_GA = perceptual_loss(self.real_A, self.fake_A, self.distorted_A, 
                                          self.mask_eyes_A, self.vggface_feats, **loss_weights)
-            loss_pl_GB = perceptual_loss(self.real_B, self.fake_B, self.distorted_B, 
-                                         self.mask_eyes_B, self.vggface_feats, **loss_weights)
         else:
             loss_pl_GA = loss_pl_GB = K.zeros(1)
 
         loss_GA = loss_adv_GA + loss_recon_GA + loss_edge_GA + loss_pl_GA
-        loss_GB = loss_adv_GB + loss_recon_GB + loss_edge_GB + loss_pl_GB
 
         # The following losses are rather trivial, thus their wegihts are fixed.
         # Cycle consistency loss
         if loss_config['use_cyclic_loss']:
             loss_GA += 10 * cyclic_loss(self.netGA, self.netGB, self.real_A)
-            loss_GB += 10 * cyclic_loss(self.netGB, self.netGA, self.real_B)
 
         # Alpha mask loss
         if not loss_config['use_mask_hinge_loss']:
             loss_GA += 1e-2 * K.mean(K.abs(self.mask_A))
-            loss_GB += 1e-2 * K.mean(K.abs(self.mask_B))
         else:
             loss_GA += 0.1 * K.mean(K.maximum(0., loss_config['m_mask'] - self.mask_A))
-            loss_GB += 0.1 * K.mean(K.maximum(0., loss_config['m_mask'] - self.mask_B))
 
         # Alpha mask total variation loss
         loss_GA += 0.1 * K.mean(first_order(self.mask_A, axis=1))
         loss_GA += 0.1 * K.mean(first_order(self.mask_A, axis=2))
-        loss_GB += 0.1 * K.mean(first_order(self.mask_B, axis=1))
-        loss_GB += 0.1 * K.mean(first_order(self.mask_B, axis=2))
 
         # L2 weight decay
         # https://github.com/keras-team/keras/issues/2662
         for loss_tensor in self.netGA.losses:
             loss_GA += loss_tensor
-        for loss_tensor in self.netGB.losses:
-            loss_GB += loss_tensor
         for loss_tensor in self.netDA.losses:
             loss_DA += loss_tensor
-        for loss_tensor in self.netDB.losses:
-            loss_DB += loss_tensor
 
         weightsDA = self.netDA.trainable_weights
         weightsGA = self.netGA.trainable_weights
-        weightsDB = self.netDB.trainable_weights
-        weightsGB = self.netGB.trainable_weights
 
         # Define training functions
         # Adam(...).get_updates(...)
@@ -239,13 +217,6 @@ class FaceswapGANModel():
         training_updates = Adam(lr=self.lrG*loss_config['lr_factor'], beta_1=0.5).get_updates(weightsGA,[], loss_GA)
         self.netGA_train = K.function([self.distorted_A, self.real_A, self.mask_eyes_A], 
                                       [loss_GA, loss_adv_GA, loss_recon_GA, loss_edge_GA, loss_pl_GA], 
-                                      training_updates)
-
-        training_updates = Adam(lr=self.lrD*loss_config['lr_factor'], beta_1=0.5).get_updates(weightsDB,[],loss_DB)
-        self.netDB_train = K.function([self.distorted_B, self.real_B],[loss_DB], training_updates)
-        training_updates = Adam(lr=self.lrG*loss_config['lr_factor'], beta_1=0.5).get_updates(weightsGB,[], loss_GB)
-        self.netGB_train = K.function([self.distorted_B, self.real_B, self.mask_eyes_B], 
-                                      [loss_GB, loss_adv_GB, loss_recon_GB, loss_edge_GB, loss_pl_GB], 
                                       training_updates)
     
     def build_pl_model(self, vggface_model, before_activ=False):

@@ -145,7 +145,7 @@ def train_person(person):
 
     display_iters = 300
     backup_iters = 5000
-    TOTAL_ITERS = 10000
+    TOTAL_ITERS = 40000
 
     def reset_session(save_path, model):
         model.save_weights(path=save_path)
@@ -277,22 +277,10 @@ def train_person(person):
                 except:
                     print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
 
-            # Display images
-            # print("----------")
-            # wA, tA, _ = train_batchA.get_next_batch()
-            # print("Transformed (masked) results:")
-            # showG(tA, tB, model.path_A, model.path_B, batchSize)
-            # print("Masks:")
-            # showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
-            # print("Reconstruction results:")
-            # showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
-            # errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
-            # for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
-            #     errGAs[k] = 0
-            #     errGBs[k] = 0
-
             # Save models
             model.save_weights(path=models_dir)
+
+            # test_faceswap(person, f'test_result/{person}_{gen_iterations}/')
 
         # Backup models
         if gen_iterations % backup_iters == 0:
@@ -301,8 +289,9 @@ def train_person(person):
             model.save_weights(path=bkup_dir)
 
 
-def test_faceswap(person, model_path, test_path):
-    mtcnn_weights_dir = f"./mtcnn_weights/{person}"
+def test_faceswap(person, test_path):
+    mtcnn_weights_dir = f"./mtcnn_weights/"
+    model_path = f'./models/{person}'
     fd = MTCNNFaceDetector(sess=K.get_session(), model_path=mtcnn_weights_dir)
 
     da_config, arch_config, loss_weights, loss_config = get_model_params()
@@ -326,6 +315,10 @@ def test_faceswap(person, model_path, test_path):
 
         # Display detected face
         faces, lms = fd.detect_face(input_img)
+
+        if len(faces) == 0:
+            continue
+
         x0, y1, x1, y0, _ = faces[0]
         det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
         try:
@@ -359,14 +352,16 @@ def test_faceswap(person, model_path, test_path):
                                                                                          int(y0):int(y1), :]
 
 
-        plt.imshow(result_input_img)
-        plt.imsave(test_path + person + f'/{test_img}')
+        # plt.imshow(result_input_img)
+        img_filename = os.path.basename(test_img)
+        plt.imsave(test_path + person + f'/{img_filename}', result_input_img)
         # cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
         # plt.show()
     
 
 if __name__ == '__main__':
-    person = 'senga'
-    train_person('senga')
+    person = 'kwsm'
+    test_faceswap(person, './test_result/')
+    # train_person('kwsm')
 
