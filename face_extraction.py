@@ -93,8 +93,8 @@ def process_mtcnn_bbox(bboxes, im_shape):
 def process_video(input_img):
     global frames, save_interval
     global pnet, rnet, onet
-    global person
-    minsize = 50  # minimum size of face
+    global person, video_num
+    minsize = 100  # minimum size of face
     detec_threshold = 0.9
     threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
     factor = 0.709  # scale factor
@@ -158,7 +158,8 @@ if __name__ == '__main__':
         # configuration
         save_interval = 6  # perform face detection every {save_interval} frames
         movies = os.listdir(MOVIE_FOLDER + person)
-        for movie in movies:
+        for num, movie in enumerate(movies):
+            video_num = num
             fn_input_video = os.path.join(MOVIE_FOLDER + person, movie)
             print(f"load {movie}")
 
