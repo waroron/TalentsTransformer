@@ -213,6 +213,9 @@ def train_person(person):
             print("Done.")
         elif gen_iterations == (8 * TOTAL_ITERS // 10 - display_iters // 2):
             clear_output()
+            # データのswapが割と肝っぽいぞ
+            # よく考えたら当たり前だけども(従来のDAを作ることが目的ではない，千賀の画像を入力して千賀の画像が出てきても
+            # ダメじゃん，人が変わらなきゃ)
             model.decoder_A.load_weights("models/decoder_B.h5")  # swap decoders
             model.decoder_B.load_weights("models/decoder_A.h5")  # swap decoders
             loss_config['use_PL'] = True
@@ -277,6 +280,11 @@ def train_person(person):
                 except:
                     print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
 
+            errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
+            for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
+                errGAs[k] = 0
+                errGBs[k] = 0
+
             # Display images
             # print("----------")
             # wA, tA, _ = train_batchA.get_next_batch()
@@ -286,10 +294,6 @@ def train_person(person):
             # showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
             # print("Reconstruction results:")
             # showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
-            # errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
-            # for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
-            #     errGAs[k] = 0
-            #     errGBs[k] = 0
 
             # Save models
             model.save_weights(path=models_dir)
@@ -364,7 +368,7 @@ def test_faceswap(person, model_path, test_path):
         # cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
         # plt.show()
-    
+
 
 if __name__ == '__main__':
     person = 'senga'
