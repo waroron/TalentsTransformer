@@ -116,9 +116,9 @@ def process_video(input_img):
             aligned_det_face_im = landmarks_match_mtcnn(
                 det_face_im, src_landmarks, tar_landmarks)
 
-            fname = f"./faces/{person}/aligned_faces/frame{frames}face{str(idx)}_{video_num}.jpg"
+            fname = f"./faces/{person}/aligned_faces/frame{frames}face{str(idx)}.jpg"
             plt.imsave(fname, aligned_det_face_im, format="jpg")
-            fname = f"./faces/{person}/raw_faces/frame{frames}face{str(idx)}_{video_num}.jpg"
+            fname = f"./faces/{person}/raw_faces/frame{frames}face{str(idx)}.jpg"
             plt.imsave(fname, det_face_im, format="jpg")
 
             bm = np.zeros_like(aligned_det_face_im)
