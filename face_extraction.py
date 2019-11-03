@@ -90,6 +90,7 @@ def process_mtcnn_bbox(bboxes, im_shape):
         bboxes[i, 0:4] = new_x0, new_y1, new_x1, new_y0
     return bboxes
 
+
 def extract_face_from_img(img, params):
     pnet, rnet, onet = params['pnet'], params['rnet'], params['onet']
     minsize = params['minsize']
