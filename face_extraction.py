@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+import glob
 
 import tensorflow as tf
 from keras import backend as K
@@ -89,11 +90,52 @@ def process_mtcnn_bbox(bboxes, im_shape):
         bboxes[i, 0:4] = new_x0, new_y1, new_x1, new_y0
     return bboxes
 
+def extract_face_from_img(img, params):
+    pnet, rnet, onet = params['pnet'], params['rnet'], params['onet']
+    minsize = params['minsize']
+    threshold = params['threshold']
+    factor = params['factor']
 
-def process_video(input_img):
-    global frames, save_interval
-    global pnet, rnet, onet
-    global person, video_num
+    faces, pnts = mtcnn_detect_face.detect_face(
+        img, minsize, pnet, rnet, onet, threshold, factor)
+    faces = process_mtcnn_bbox(faces, img.shape)
+
+    aligned_list = []
+    det_faces = []
+    bm_list = []
+
+    for idx, (x0, y1, x1, y0, conf_score) in enumerate(faces):
+        det_face_im = img[int(x0):int(x1), int(y0):int(y1), :]
+
+        # get src/tar landmarks
+        src_landmarks = get_src_landmarks(x0, x1, y0, y1, pnts)
+        tar_landmarks = get_tar_landmarks(det_face_im)
+
+        # align detected face
+        aligned_det_face_im = landmarks_match_mtcnn(
+            det_face_im, src_landmarks, tar_landmarks)
+
+        bm = np.zeros_like(aligned_det_face_im)
+        h, w = bm.shape[:2]
+        bm[int(src_landmarks[0][0] - h / 15):int(src_landmarks[0][0] + h / 15),
+        int(src_landmarks[0][1] - w / 8):int(src_landmarks[0][1] + w / 8), :] = 255
+        bm[int(src_landmarks[1][0] - h / 15):int(src_landmarks[1][0] + h / 15),
+        int(src_landmarks[1][1] - w / 8):int(src_landmarks[1][1] + w / 8), :] = 255
+        bm = landmarks_match_mtcnn(bm, src_landmarks, tar_landmarks)
+
+        aligned_list.append(aligned_det_face_im)
+        det_faces.append(det_face_im)
+        bm_list.append(bm)
+
+    return aligned_list, det_faces, bm_list
+
+
+def process_video(input_img, params):
+    frames = params['frames']
+    save_interval = params['save_interval']
+    pnet, rnet, onet = params['pnet'], params['rnet'], params['onet']
+    person = params['person']
+    video_num = params['video_num']
     minsize = 100  # minimum size of face
     detec_threshold = 0.9
     threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
@@ -101,43 +143,37 @@ def process_video(input_img):
 
     frames += 1
     if frames % save_interval == 0:
-        faces, pnts = mtcnn_detect_face.detect_face(
-            input_img, minsize, pnet, rnet, onet, threshold, factor)
-        faces = process_mtcnn_bbox(faces, input_img.shape)
+        det_params = {'minsize': minsize,
+                  'threshold': threshold,
+                  'pnet': pnet,
+                  'rnet': rnet,
+                  'onet': onet,
+                  'factor': factor}
+        aligned_list, det_faces, bm_list = extract_face_from_img(input_img, det_params)
 
-        for idx, (x0, y1, x1, y0, conf_score) in enumerate(faces):
-            det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
-
-            # get src/tar landmarks
-            src_landmarks = get_src_landmarks(x0, x1, y0, y1, pnts)
-            tar_landmarks = get_tar_landmarks(det_face_im)
-
-            # align detected face
-            aligned_det_face_im = landmarks_match_mtcnn(
-                det_face_im, src_landmarks, tar_landmarks)
-
-            fname = f"./faces/{person}/aligned_faces/frame{frames}face{str(idx)}.jpg"
-            plt.imsave(fname, aligned_det_face_im, format="jpg")
-            fname = f"./faces/{person}/raw_faces/frame{frames}face{str(idx)}.jpg"
-            plt.imsave(fname, det_face_im, format="jpg")
-
-            bm = np.zeros_like(aligned_det_face_im)
-            h, w = bm.shape[:2]
-            bm[int(src_landmarks[0][0] - h / 15):int(src_landmarks[0][0] + h / 15),
-            int(src_landmarks[0][1] - w / 8):int(src_landmarks[0][1] + w / 8), :] = 255
-            bm[int(src_landmarks[1][0] - h / 15):int(src_landmarks[1][0] + h / 15),
-            int(src_landmarks[1][1] - w / 8):int(src_landmarks[1][1] + w / 8), :] = 255
-            bm = landmarks_match_mtcnn(bm, src_landmarks, tar_landmarks)
-            fname = f"./faces/{person}/binary_masks_eyes/frame{frames}face{str(idx)}.jpg"
-            plt.imsave(fname, bm, format="jpg")
+        for n in range(len(aligned_list)):
+            fname = f"./faces/{person}/aligned_faces/frame{frames}face{str(n)}.jpg"
+            plt.imsave(fname, aligned_list[n], format="jpg")
+            fname = f"./faces/{person}/raw_faces/frame{frames}face{str(n)}.jpg"
+            plt.imsave(fname, det_faces[n], format="jpg")
+            fname = f"./faces/{person}/binary_masks_eyes/frame{frames}face{str(n)}.jpg"
+            plt.imsave(fname, bm_list[n], format="jpg")
 
     return np.zeros((3, 3, 3))
 
 
 if __name__ == '__main__':
+    mv_persons = None
+    img_persons = None
     WEIGHTS_PATH = "./mtcnn_weights/"
     MOVIE_FOLDER = "./movie/"
-    persons = os.listdir(MOVIE_FOLDER)
+    IMAGE_FOLDER = "/images"
+
+    if not mv_persons:
+        mv_persons = os.listdir(MOVIE_FOLDER)
+
+    if not img_persons:
+        img_persons = os.listdir(IMAGE_FOLDER)
 
     sess = K.get_session()
     with sess.as_default():
@@ -147,7 +183,37 @@ if __name__ == '__main__':
     rnet = K.function([rnet.layers['data']], [rnet.layers['conv5-2'], rnet.layers['prob1']])
     onet = K.function([onet.layers['data']], [onet.layers['conv6-2'], onet.layers['conv6-3'], onet.layers['prob1']])
 
-    for person in persons:
+    for person in img_persons:
+        Path(f"faces/{person}/aligned_faces").mkdir(parents=True, exist_ok=True)
+        Path(f"faces/{person}/raw_faces").mkdir(parents=True, exist_ok=True)
+        Path(f"faces/{person}/binary_masks_eyes").mkdir(parents=True, exist_ok=True)
+
+        img_folder = f"{IMAGE_FOLDER}/{person}"
+        imgs_list = os.listdir(img_folder)
+
+        for img_n, img_name in enumerate(imgs_list):
+            img = plt.imread(f"{img_folder}/{img_name}")
+            minsize = 100  # minimum size of face
+            detec_threshold = 0.9
+            threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
+            factor = 0.709  # scale factor
+            det_params = {'minsize': minsize,
+                          'threshold': threshold,
+                          'pnet': pnet,
+                          'rnet': rnet,
+                          'onet': onet,
+                          'factor': factor}
+            aligned_list, det_faces, bm_list = extract_face_from_img(img, det_params)
+
+            for n in range(len(aligned_list)):
+                fname = f"./faces/{person}/aligned_faces/img{img_n}_face{str(n)}.jpg"
+                plt.imsave(fname, aligned_list[n], format="jpg")
+                fname = f"./faces/{person}/raw_faces/img{img_n}_face{str(n)}.jpg"
+                plt.imsave(fname, det_faces[n], format="jpg")
+                fname = f"./faces/{person}/binary_masks_eyes/img{img_n}_face{str(n)}.jpg"
+                plt.imsave(fname, bm_list[n], format="jpg")
+
+    for person in mv_persons:
         print(f'persons: {person}')
 
         Path(f"faces/{person}/aligned_faces").mkdir(parents=True, exist_ok=True)
@@ -161,10 +227,17 @@ if __name__ == '__main__':
         for num, movie in enumerate(movies):
             video_num = num
             fn_input_video = os.path.join(MOVIE_FOLDER + person, movie)
-            print(f"load {movie}")
+            params = {'frames': frames,
+                      'save_interval': save_interval,
+                      'pnet': pnet,
+                      'rnet': rnet,
+                      'onet': onet,
+                      'person': person,
+                      'video_num': video_num}
 
+            print(f"load {movie}")
             output = 'dummy.mp4'
             clip1 = VideoFileClip(fn_input_video)
-            clip = clip1.fl_image(process_video)  # .subclip(0,3) #NOTE: this function expects color images!!
+            clip = clip1.fl_image(lambda img: process_video(img, params))  # .subclip(0,3) #NOTE: this function expects color images!!
             clip.write_videofile(output, audio=False)
             clip1.reader.close()
