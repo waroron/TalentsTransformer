@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 import glob
+import shutil
 
 import tensorflow as tf
 from keras import backend as K
@@ -136,7 +137,7 @@ def process_video(input_img, params):
     pnet, rnet, onet = params['pnet'], params['rnet'], params['onet']
     person = params['person']
     video_num = params['video_num']
-    minsize = 100  # minimum size of face
+    minsize = 50  # minimum size of face
     detec_threshold = 0.9
     threshold = [0.6, 0.7, detec_threshold]  # three steps's threshold
     factor = 0.709  # scale factor
@@ -162,12 +163,24 @@ def process_video(input_img, params):
     return np.zeros((3, 3, 3))
 
 
+def extract_imgfile(folder):
+    idols = os.listdir(folder)
+
+    for idol in idols:
+        img_paths = glob.glob(f"{folder}/{idol}/*.*")
+        for img_path in img_paths:
+            shutil.move(img_path, f"{folder}/")
+        print(f'{idol} file extracted')
+
+
 if __name__ == '__main__':
-    mv_persons = None
-    img_persons = None
+    mv_persons = ['imas']
+    img_persons = ['imas']
     WEIGHTS_PATH = "./mtcnn_weights/"
     MOVIE_FOLDER = "./movie/"
-    IMAGE_FOLDER = "/images"
+    IMAGE_FOLDER = "./images"
+
+    # extract_imgfile(f"{IMAGE_FOLDER}/imas")
 
     if not mv_persons:
         mv_persons = os.listdir(MOVIE_FOLDER)
