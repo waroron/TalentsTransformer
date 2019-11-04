@@ -84,7 +84,7 @@ def get_model_params():
     return da_config, arch_config, loss_weights, loss_config
 
 
-def train_person(person):
+def train_person(person, gen_person):
     # Number of CPU cores
     num_cpus = os.cpu_count()
 
@@ -95,6 +95,9 @@ def train_person(person):
     # Path to training images
     img_dir = f'./faces/{person}'
     img_dir_bm_eyes = f"./binary_masks/{person}"
+    
+    gen_img_dir = f'./faces/{gen_person}'
+    gen_img_dir_bm_eyes = f"./binary_masks/{gen_person}"
 
     # Path to saved model weights
     models_dir = f"./models/{person}"
@@ -117,19 +120,24 @@ def train_person(person):
     Path(models_dir).mkdir(parents=True, exist_ok=True)
 
     # Get filenames
-    train_img = glob.glob(img_dir + f"/raw_faces/*.*")
+    person_img = glob.glob(img_dir + f"/raw_faces/*.*")
+    gen_person_img = glob.glob(gen_img_dir + f"/raw_faces/*.*")
+    all_img = person_img + gen_person
 
-    assert len(train_img), "No image found in " + str(img_dir)
-    print("Number of images in folder: " + str(len(train_img)))
+    assert len(person_img), "No image found in " + str(img_dir)
+    print("Number of images in folder: " + str(len(person_img)))
 
     if da_config["use_bm_eyes"]:
         assert len(glob.glob(img_dir_bm_eyes + "/*.*")), "No binary mask found in " + str(img_dir_bm_eyes)
-        assert len(glob.glob(img_dir_bm_eyes + "/*.*")) == len(train_img), \
+        assert len(glob.glob(img_dir_bm_eyes + "/*.*")) == len(person_img), \
             "Number of faceA images does not match number of their binary masks. Can be caused by any none image file in the folder."
 
-    train_batchA = DataLoader(train_img, train_img, batchSize, img_dir_bm_eyes,
+    train_batchA = DataLoader(person_img, all_img, batchSize, img_dir_bm_eyes,
                               RESOLUTION, num_cpus, K.get_session(), **da_config)
-    _, tA, bmA = train_batchA.get_next_batch()
+    train_batchB = DataLoader(gen_person_img, all_img, batchSize, gen_img_dir_bm_eyes,
+                              RESOLUTION, num_cpus, K.get_session(), **da_config)
+    # _, tA, bmA = train_batchA.get_next_batch()
+    # _, tB, bmB = train_batchB.get_next_batch()
     # showG_eyes(tA, tB, bmA, bmB, batchSize)
 
     t0 = time.time()
@@ -147,16 +155,21 @@ def train_person(person):
     backup_iters = 5000
     TOTAL_ITERS = 10000
 
-    def reset_session(save_path, model):
+    def reset_session(save_path, model, person='A'):
         model.save_weights(path=save_path)
         K.clear_session()
         model = FaceswapGANModel(**arch_config)
         model.load_weights(path=save_path)
         vggface = VGGFace(include_top=False, model='resnet50', input_shape=(224, 224, 3))
         model.build_pl_model(vggface_model=vggface, before_activ=loss_config["PL_before_activ"])
-        train_batchA = DataLoader(train_img, train_img, batchSize, img_dir_bm_eyes,
-                                  RESOLUTION, num_cpus, K.get_session(), **da_config)
-        return model, vggface, train_batchA
+        if person == 'A':
+            train_batch = DataLoader(person_img, all_img, batchSize, img_dir_bm_eyes,
+                                      RESOLUTION, num_cpus, K.get_session(), **da_config)
+        else:
+            train_batch = DataLoader(gen_person_img, all_img, batchSize, gen_img_dir_bm_eyes,
+                                      RESOLUTION, num_cpus, K.get_session(), **da_config)
+
+        return model, vggface, train_batch
 
     while gen_iterations <= TOTAL_ITERS:
         # Loss function automation
@@ -213,13 +226,15 @@ def train_person(person):
             print("Done.")
         elif gen_iterations == (8 * TOTAL_ITERS // 10 - display_iters // 2):
             clear_output()
+            # データのswapが割と肝っぽいぞ
+            # よく考えたら当たり前だけども(従来のDAを作ることが目的ではない，千賀の画像を入力して千賀の画像が出てきても
+            # ダメじゃん，人が変わらなきゃ)
             model.decoder_A.load_weights("models/decoder_B.h5")  # swap decoders
-            model.decoder_B.load_weights("models/decoder_A.h5")  # swap decoders
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.1
             loss_config['lr_factor'] = 0.3
-            model, vggface, train_batchA = reset_session(models_dir, model)
+            model, vggface, train_batchA = reset_session(models_dir, model, person='B')
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -277,6 +292,11 @@ def train_person(person):
                 except:
                     print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
 
+            errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
+            for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
+                errGAs[k] = 0
+                errGBs[k] = 0
+
             # Display images
             # print("----------")
             # wA, tA, _ = train_batchA.get_next_batch()
@@ -286,10 +306,6 @@ def train_person(person):
             # showG_mask(tA, tB, model.path_mask_A, model.path_mask_B, batchSize)
             # print("Reconstruction results:")
             # showG(wA, wB, model.path_bgr_A, model.path_bgr_B, batchSize)
-            # errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
-            # for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
-            #     errGAs[k] = 0
-            #     errGBs[k] = 0
 
             # Save models
             model.save_weights(path=models_dir)
@@ -364,7 +380,7 @@ def test_faceswap(person, model_path, test_path):
         # cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
         # plt.show()
-    
+
 
 if __name__ == '__main__':
     person = 'senga'
