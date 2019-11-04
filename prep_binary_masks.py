@@ -9,7 +9,10 @@ from matplotlib import pyplot as plt
 
 
 if __name__ == '__main__':
-    persons = os.listdir('movie')
+    persons = ['imas']
+
+    if not persons:
+        persons = os.listdir('movie')
 
     for person in persons:
         print(f'processing: {person}')

@@ -91,6 +91,7 @@ def process_mtcnn_bbox(bboxes, im_shape):
         bboxes[i, 0:4] = new_x0, new_y1, new_x1, new_y0
     return bboxes
 
+
 def extract_face_from_img(img, params):
     pnet, rnet, onet = params['pnet'], params['rnet'], params['onet']
     minsize = params['minsize']
@@ -173,6 +174,17 @@ def extract_imgfile(folder):
         print(f'{idol} file extracted')
 
 
+def png2jpg(folder):
+    imgs = glob.glob(f'{folder}/*.*')
+
+    for img_name in imgs:
+        name, ext = os.path.splitext(img_name)
+        save_name = f'{name}.jpg'
+        img = cv2.imread(img_name)
+        cv2.imwrite(save_name, img)
+        print(f'save {save_name}')
+
+
 if __name__ == '__main__':
     mv_persons = ['imas']
     img_persons = ['imas']
@@ -181,6 +193,7 @@ if __name__ == '__main__':
     IMAGE_FOLDER = "./images"
 
     # extract_imgfile(f"{IMAGE_FOLDER}/imas")
+    # png2jpg(f"{IMAGE_FOLDER}/imas")
 
     if not mv_persons:
         mv_persons = os.listdir(MOVIE_FOLDER)

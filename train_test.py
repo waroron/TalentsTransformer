@@ -41,7 +41,7 @@ def interpolate_imgs(im1, im2):
 def get_model_params():
     # Use motion blurs (data augmentation)
     # set True if training data contains images extracted from videos
-    use_da_motion_blur = True
+    use_da_motion_blur = False
 
     # Use eye-aware training
     # require images generated from prep_binary_masks.ipynb
@@ -89,7 +89,7 @@ def train_person(person, gen_person):
     num_cpus = os.cpu_count()
 
     # Batch size
-    batchSize = 4
+    batchSize = 2
     assert (batchSize != 1 and batchSize % 2 == 0), "batchSize should be an even number."
 
     # Path to training images
@@ -122,7 +122,7 @@ def train_person(person, gen_person):
     # Get filenames
     person_img = glob.glob(img_dir + f"/raw_faces/*.*")
     gen_person_img = glob.glob(gen_img_dir + f"/raw_faces/*.*")
-    all_img = person_img + gen_person
+    all_img = person_img + gen_person_img
 
     assert len(person_img), "No image found in " + str(img_dir)
     print("Number of images in folder: " + str(len(person_img)))
@@ -141,7 +141,7 @@ def train_person(person, gen_person):
     # showG_eyes(tA, tB, bmA, bmB, batchSize)
 
     t0 = time.time()
-    gen_iterations = 0
+    gen_iterations = 34999
 
     errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
     errGAs = {}
@@ -153,7 +153,7 @@ def train_person(person, gen_person):
 
     display_iters = 300
     backup_iters = 5000
-    TOTAL_ITERS = 10000
+    TOTAL_ITERS = 40000
 
     def reset_session(save_path, model, person='A'):
         model.save_weights(path=save_path)
@@ -229,7 +229,7 @@ def train_person(person, gen_person):
             # データのswapが割と肝っぽいぞ
             # よく考えたら当たり前だけども(従来のDAを作ることが目的ではない，千賀の画像を入力して千賀の画像が出てきても
             # ダメじゃん，人が変わらなきゃ)
-            model.decoder_A.load_weights("models/decoder_B.h5")  # swap decoders
+            model.decoder_A.load_weights(f"{models_dir}/decoder_A.h5")  # swap decoders
             loss_config['use_PL'] = True
             loss_config['use_mask_hinge_loss'] = True
             loss_config['m_mask'] = 0.1
@@ -245,7 +245,7 @@ def train_person(person, gen_person):
             loss_config['use_mask_hinge_loss'] = False
             loss_config['m_mask'] = 0.0
             loss_config['lr_factor'] = 0.1
-            model, vggface, train_batchA = reset_session(models_dir, model)
+            model, vggface, train_batchA = reset_session(models_dir, model, person='B')
             print("Building new loss funcitons...")
             show_loss_config(loss_config)
             model.build_train_functions(loss_weights=loss_weights, **loss_config)
@@ -288,9 +288,9 @@ def train_person(person, gen_person):
             if loss_config['use_PL'] == True:
                 print(f'[Perceptual loss]')
                 try:
-                    print(f'GA: {errGAs["pl"][0] / display_iters:.4f} GB: {errGBs["pl"][0] / display_iters:.4f}')
+                    print(f'GA: {errGAs["pl"][0] / display_iters:.4f}')
                 except:
-                    print(f'GA: {errGAs["pl"] / display_iters:.4f} GB: {errGBs["pl"] / display_iters:.4f}')
+                    print(f'GA: {errGAs["pl"] / display_iters:.4f}')
 
             errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
             for k in ['ttl', 'adv', 'recon', 'edge', 'pl']:
@@ -315,10 +315,11 @@ def train_person(person, gen_person):
             bkup_dir = f"{models_dir}/backup_iter{gen_iterations}"
             Path(bkup_dir).mkdir(parents=True, exist_ok=True)
             model.save_weights(path=bkup_dir)
+            test_faceswap(person, models_dir, 'test_result', f'test_result/{person}/{gen_iterations}')
 
 
-def test_faceswap(person, model_path, test_path):
-    mtcnn_weights_dir = f"./mtcnn_weights/{person}"
+def test_faceswap(person, model_path, test_path, save_path):
+    mtcnn_weights_dir = "./mtcnn_weights/"
     fd = MTCNNFaceDetector(sess=K.get_session(), model_path=mtcnn_weights_dir)
 
     da_config, arch_config, loss_weights, loss_config = get_model_params()
@@ -330,8 +331,8 @@ def test_faceswap(person, model_path, test_path):
     ftrans.set_model(model)
 
     # Read input image
-    test_imgs = glob.glob(test_path + '*.jpg')
-    Path(test_path + person).mkdir(parents=True, exist_ok=True)
+    test_imgs = glob.glob(test_path + '/*.jpg')
+    Path(save_path).mkdir(parents=True, exist_ok=True)
 
     for test_img in test_imgs:
         input_img = plt.imread(test_img)[..., :3]
@@ -342,6 +343,8 @@ def test_faceswap(person, model_path, test_path):
 
         # Display detected face
         faces, lms = fd.detect_face(input_img)
+        if len(faces) == 0:
+            continue
         x0, y1, x1, y0, _ = faces[0]
         det_face_im = input_img[int(x0):int(x1), int(y0):int(y1), :]
         try:
@@ -374,15 +377,17 @@ def test_faceswap(person, model_path, test_path):
                                                                     np.float32) / 255) * result_input_img[int(x0):int(x1),
                                                                                          int(y0):int(y1), :]
 
-
+        img_name = os.path.basename(test_img)
         plt.imshow(result_input_img)
-        plt.imsave(test_path + person + f'/{test_img}')
+        plt.imsave(f'{save_path}/{img_name}', result_input_img)
         # cv2.imwrite('result.jpg', cv2.cvtColor(result_input_img, cv2.COLOR_RGB2BGR))
 
         # plt.show()
 
 
 if __name__ == '__main__':
-    person = 'senga'
-    train_person('senga')
+    person = 'kwsm'
+    gen_person = 'imas'
+    # train_person(person, gen_person)
+    test_faceswap(person, f'./models/{person}', './test_result/', f'./test_result/{person}')
 
