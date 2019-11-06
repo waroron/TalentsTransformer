@@ -100,7 +100,7 @@ def train_person(person, gen_person):
     gen_img_dir_bm_eyes = f"./binary_masks/{gen_person}"
 
     # Path to saved model weights
-    models_dir = f"./models/{person}"
+    models_dir = f"./models/{gen_person}2{person}"
 
     da_config, arch_config, loss_weights, loss_config = get_model_params()
 
@@ -141,7 +141,7 @@ def train_person(person, gen_person):
     # showG_eyes(tA, tB, bmA, bmB, batchSize)
 
     t0 = time.time()
-    gen_iterations = 34999
+    gen_iterations = 0
 
     errGA_sum = errGB_sum = errDA_sum = errDB_sum = 0
     errGAs = {}
@@ -153,7 +153,7 @@ def train_person(person, gen_person):
 
     display_iters = 300
     backup_iters = 5000
-    TOTAL_ITERS = 40000
+    TOTAL_ITERS = 10000
 
     def reset_session(save_path, model, person='A'):
         model.save_weights(path=save_path)
@@ -163,10 +163,10 @@ def train_person(person, gen_person):
         vggface = VGGFace(include_top=False, model='resnet50', input_shape=(224, 224, 3))
         model.build_pl_model(vggface_model=vggface, before_activ=loss_config["PL_before_activ"])
         if person == 'A':
-            train_batch = DataLoader(person_img, all_img, batchSize, img_dir_bm_eyes,
+            train_batch = DataLoader(gen_person_img, all_img, batchSize, gen_img_dir_bm_eyes,
                                       RESOLUTION, num_cpus, K.get_session(), **da_config)
         else:
-            train_batch = DataLoader(gen_person_img, all_img, batchSize, gen_img_dir_bm_eyes,
+            train_batch = DataLoader(person_img, all_img, batchSize, img_dir_bm_eyes,
                                       RESOLUTION, num_cpus, K.get_session(), **da_config)
 
         return model, vggface, train_batch
@@ -315,7 +315,7 @@ def train_person(person, gen_person):
             bkup_dir = f"{models_dir}/backup_iter{gen_iterations}"
             Path(bkup_dir).mkdir(parents=True, exist_ok=True)
             model.save_weights(path=bkup_dir)
-            test_faceswap(person, models_dir, 'test_result', f'test_result/{person}/{gen_iterations}')
+            #test_faceswap(person, models_dir, 'test_result', f'test_result/{person}/{gen_iterations}')
 
 
 def test_faceswap(person, model_path, test_path, save_path):
@@ -387,7 +387,7 @@ def test_faceswap(person, model_path, test_path, save_path):
 
 if __name__ == '__main__':
     person = 'kwsm'
-    gen_person = 'imas'
+    gen_person = 'aiko_airi'
     # train_person(person, gen_person)
     test_faceswap(person, f'./models/{person}', './test_result/', f'./test_result/{person}')
 

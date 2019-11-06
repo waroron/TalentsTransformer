@@ -187,7 +187,7 @@ def png2jpg(folder):
 
 if __name__ == '__main__':
     mv_persons = ['imas']
-    img_persons = ['imas']
+    img_persons = ['aiko_airi']
     WEIGHTS_PATH = "./mtcnn_weights/"
     MOVIE_FOLDER = "./movie/"
     IMAGE_FOLDER = "./images"

@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 
 
 if __name__ == '__main__':
-    persons = ['imas']
+    persons = ['aiko_airi']
 
     if not persons:
         persons = os.listdir('movie')
